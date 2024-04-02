@@ -68,18 +68,28 @@ def check_mail():
 
     # получаем тело письма
     body = ""
+    attachments = []
     if email_message.is_multipart():
         for part in email_message.get_payload():
             if part.get_content_type() == "text/plain":
                 body = part.get_payload(decode=True)
+            elif part.get_content_type().startswith("image/"):
+                # это вложение-изображение, сохраняем его
+                image_data = part.get_payload(decode=True)
+                image_name = part.get_filename()
+                if image_name:
+                    image_name = "".join(c for c in image_name if c.isalnum() or c in "._-")
+                    with open(image_name, 'wb') as f:
+                        f.write(image_data)
+                    attachments.append(image_name)
     else:
         body = email_message.get_payload(decode=True)
 
-    return subject, body
+    return subject, body, attachments
 
 def check_mail_periodically():
     while True:
-        subject, body = check_mail()
+        subject, body, attachments = check_mail()
         if subject is None and body is None:
             print("Не удалось проверить почту.")
             return
@@ -88,6 +98,10 @@ def check_mail_periodically():
             for chat_id in chat_ids:
                 try:
                     bot.send_message(chat_id, f"Тема письма: {subject}\n\n{body}")
+                    for attachment in attachments:
+                        with open(attachment, 'rb') as img:
+                            bot.send_photo(chat_id, img)
+                        os.remove(attachment)
                 except telebot.apihelper.ApiException:
                     print(f"Не удалось отправить сообщение в чат {chat_id}. Возможно, бот не состоит в этом чате.")
         # ждем 10 минут

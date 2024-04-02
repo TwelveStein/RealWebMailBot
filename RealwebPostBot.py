@@ -6,6 +6,7 @@ import os
 import telebot
 import threading
 import time
+import sys
 
 # читаем токен из файла
 with open('DataFiles/token.txt', 'r') as f:
@@ -28,15 +29,25 @@ with open('DataFiles/chats.txt', 'r') as f:
 bot = telebot.TeleBot(token)
 
 def check_mail():
-    try:
-        # подключаемся к почтовому серверу
-        mail = imaplib.IMAP4_SSL(mail_server, port=int(port))
-        # логинимся
-        mail.login(email_address, password)
-    except Exception as e:
-        print(f"Не удалось подключиться к почтовому серверу: {e}")
-        return None, None
-    print("Подключение установлено")
+    attempts = 0
+    trys = 10
+    while attempts < trys:
+        try:
+            # подключаемся к почтовому серверу
+            mail = imaplib.IMAP4_SSL(mail_server, port=int(port))
+            # логинимся
+            mail.login(email_address, password)
+            print("Подключение установлено")
+        except Exception as e:
+            print(f"Не удалось подключиться к почтовому серверу: {e}")
+            print("Повторная попытка через 1 минуту...")
+            time.sleep(60)  # ждем 1 минуту перед повторной попыткой
+            attempts += 1
+    if attempts == trys:
+        print("Не удалось подключиться к почтовому серверу после 10 попыток. Завершение работы.")
+        bot.stop_polling()
+        sys.exit(1)
+
 
     mail.select("inbox")
 
@@ -71,6 +82,7 @@ def check_mail_periodically():
         subject, body = check_mail()
         if subject is None and body is None:
             print("Не удалось проверить почту.")
+            return
         else:
             # отправляем сообщение в каждый чат из списка
             for chat_id in chat_ids:

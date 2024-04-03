@@ -96,7 +96,7 @@ def check_mail():
     else:  # если нет непрочитанных сообщений
         print("Нет непрочитанных сообщений.")
         # ждем 10 минут
-        time.sleep(10)
+        time.sleep(600)
         return None, None, None
 
 def check_mail_periodically():

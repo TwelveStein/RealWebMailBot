@@ -1,12 +1,13 @@
 import imaplib
 import email
 from email.header import decode_header
-import webbrowser
 import os
 import telebot
 import threading
 import time
 import sys
+import html
+import re
 
 # читаем токен из файла
 with open('DataFiles/token.txt', 'r') as f:
@@ -38,6 +39,7 @@ def check_mail():
             # логинимся
             mail.login(email_address, password)
             print("Подключение установлено")
+            break
         except Exception as e:
             print(f"Не удалось подключиться к почтовому серверу: {e}")
             print("Попытка [{trys+1}]. Повторная попытка через 1 минуту...")
@@ -54,58 +56,77 @@ def check_mail():
     # получаем непрочитанные письма
     result, data = mail.uid('search', None, "(UNSEEN)")
     email_ids = data[0].split()
-    latest_email_id = email_ids[-1]
 
-    # получаем информацию о письме
-    result, email_data = mail.uid('fetch', latest_email_id, '(BODY.PEEK[])')
-    raw_email = email_data[0][1]
-    email_message = email.message_from_bytes(raw_email)
+    if email_ids:  # если есть непрочитанные сообщения
+        latest_email_id = email_ids[-1]
 
-    # получаем тему письма
-    subject = decode_header(email_message['Subject'])[0][0]
-    if isinstance(subject, bytes):
-        subject = subject.decode()
+        # получаем информацию о письме
+        result, email_data = mail.uid('fetch', latest_email_id, '(BODY.PEEK[])')
+        raw_email = email_data[0][1]
+        email_message = email.message_from_bytes(raw_email)
 
-    # получаем тело письма
-    body = ""
-    attachments = []
-    if email_message.is_multipart():
-        for part in email_message.get_payload():
-            if part.get_content_type() == "text/plain":
-                body = part.get_payload(decode=True)
-            elif part.get_content_type().startswith("image/"):
-                # это вложение-изображение, сохраняем его
-                image_data = part.get_payload(decode=True)
-                image_name = part.get_filename()
-                if image_name:
-                    image_name = "".join(c for c in image_name if c.isalnum() or c in "._-")
-                    with open(image_name, 'wb') as f:
-                        f.write(image_data)
-                    attachments.append(image_name)
-    else:
-        body = email_message.get_payload(decode=True)
+        # помечаем сообщение как прочитанное
+        mail.uid('store', latest_email_id, '+FLAGS', '(\Seen)')
 
-    return subject, body, attachments
+        # получаем тему письма
+        subject = decode_header(email_message['Subject'])[0][0]
+        if isinstance(subject, bytes):
+            subject = subject.decode()
+
+        # получаем тело письма
+        body = ""
+        attachments = []
+        if email_message.is_multipart():
+            for part in email_message.get_payload():
+                if part.get_content_type() == "text/plain":
+                    body = part.get_payload(decode=True)
+                elif part.get_content_type().startswith("image/"):
+                    # это вложение-изображение, сохраняем его
+                    image_data = part.get_payload(decode=True)
+                    image_name = part.get_filename()
+                    if image_name:
+                        image_name = "".join(c for c in image_name if c.isalnum() or c in "._-")
+                        with open(image_name, 'wb') as f:
+                            f.write(image_data)
+                        attachments.append(image_name)
+        else:
+            body = email_message.get_payload(decode=True)
+
+        return subject, body, attachments
+    else:  # если нет непрочитанных сообщений
+        print("Нет непрочитанных сообщений.")
+        # ждем 10 минут
+        time.sleep(10)
+        return None, None, None
 
 def check_mail_periodically():
     while True:
         subject, body, attachments = check_mail()
         if subject is None and body is None:
-            print("Не удалось проверить почту.")
-            return
+            continue
         else:
+            # Заменяем <br> на \n для переноса строки
+            body = body.decode().replace('<br>', '\n')
+            # Заменяем <b> и </b> на * для форматирования в стиле Markdown
+            body = body.replace('<b>', '').replace('</b>', '')
+            # Удаляем теги <span> и </span>
+            body = body.replace('<span>', '').replace('</span>', '')
+            # Заменяем HTML-сущности на обычный текст
+            body = html.unescape(body)
+            # Экранируем только символы [ и ], которые могут вызвать проблемы в MarkdownV2
+            body = re.sub(r'(_*\[\~`>#\+\-=|{}.!])', r'\\\1', body)
+            
             # отправляем сообщение в каждый чат из списка
             for chat_id in chat_ids:
                 try:
-                    bot.send_message(chat_id, f"Тема письма: {subject}\n\n{body}")
+                    bot.send_message(chat_id, f"Тема письма: {subject}\n\n{body}", parse_mode='Markdown')
                     for attachment in attachments:
                         with open(attachment, 'rb') as img:
                             bot.send_photo(chat_id, img)
                         os.remove(attachment)
                 except telebot.apihelper.ApiException:
                     print(f"Не удалось отправить сообщение в чат {chat_id}. Возможно, бот не состоит в этом чате.")
-        # ждем 10 минут
-        time.sleep(600)
+        
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):

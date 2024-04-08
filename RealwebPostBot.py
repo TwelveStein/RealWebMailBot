@@ -42,7 +42,7 @@ def check_mail():
             break
         except Exception as e:
             print(f"Не удалось подключиться к почтовому серверу: {e}")
-            print("Попытка [{trys+1}]. Повторная попытка через 1 минуту...")
+            print("Повторная попытка через 1 минуту...")
             time.sleep(60)  # ждем 1 минуту перед повторной попыткой
             attempts += 1
     if attempts == trys:
@@ -183,4 +183,9 @@ def handle_left_chat_member(message):
 # создаем и запускаем новый поток, который будет проверять почту каждые 10 минут
 threading.Thread(target=check_mail_periodically).start()
 
-bot.polling()
+while True:
+    try:
+        bot.polling(none_stop=True, interval=10)
+    except Exception as e:
+        print(f"Ошибка: {e}. Повторная попытка через 5 секунд.")
+        time.sleep(5)

@@ -30,9 +30,7 @@ with open('DataFiles/chats.txt', 'r') as f:
 bot = telebot.TeleBot(token)
 
 def check_mail():
-    attempts = 0
-    trys = 10
-    while attempts < trys:
+    while True:
         try:
             # подключаемся к почтовому серверу
             mail = imaplib.IMAP4_SSL(mail_server, port=int(port))
@@ -44,11 +42,6 @@ def check_mail():
             print(f"Не удалось подключиться к почтовому серверу: {e}")
             print("Повторная попытка через 1 минуту...")
             time.sleep(60)  # ждем 1 минуту перед повторной попыткой
-            attempts += 1
-    if attempts == trys:
-        print("Не удалось подключиться к почтовому серверу после 10 попыток. Завершение работы.")
-        bot.stop_polling()
-        sys.exit(1)
 
 
     mail.select("inbox")
